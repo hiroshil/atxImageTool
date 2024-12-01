@@ -3,7 +3,7 @@
 import sys
 import json
 import shutil
-from os import path
+from pathlib import Path
 from PIL import Image, ImageDraw
 from zipfile import ZipFile
 
@@ -12,7 +12,9 @@ def rebuild_sprite(json_data, texture_path):
     canvas_height = json_data["Canvas"]["Height"]
     sprites = []
 
-    for block in json_data["Block"]:
+    blocks = sorted(json_data["Block"], key=lambda k: k['priority'], reverse=True)
+    for block in blocks:
+        base_image = f"{blocks[0]['filename']}_" if block != blocks[0] else ''
         sprite = Image.new("RGBA", (canvas_width, canvas_height), (0, 0, 0, 0))
         offset_x = block["offsetX"]
         offset_y = block["offsetY"]
@@ -37,7 +39,7 @@ def rebuild_sprite(json_data, texture_path):
             ))
 
             sprite.paste(cropped_texture, (round(src_offset_x) + round(offset_x), round(src_offset_y) + round(offset_y)))
-            sprites.append(sprite)
+        sprites.append((sprite, f"{base_image}{block['filename']}"))
     return sprites
 
 if __name__ == "__main__":
@@ -49,19 +51,18 @@ if __name__ == "__main__":
         zip_ref.extractall('temp')
     with open(f'temp/atlas.json', "r") as json_file:
         json_data = json.load(json_file)
-    if path.exists('temp/tex0.png'):
+    if Path('temp/tex0.png').exists():
         tex_path = f"temp/tex[tex_no].png"
     else:
         tex_path = f"temp/tex[tex_no].webp"
     sprites = rebuild_sprite(json_data, tex_path)
-    if len(sprites) > 1:
-        sprite_no = 0
+    len_path = 5 if "l" in file else 4
+    output_path = Path(file).parent / Path(file).stem[:len_path]
+    output_path.mkdir(parents=True, exist_ok=True)
+    if len(sprites):
         for sprite in sprites:
-            sprite.save(f'{file.replace(".atx", "_" + str(sprite_no) + ".png")}', "PNG")
-            print(f'> Reconstructed CG saved as {file.replace(".atx", "_" + str(sprite_no) + ".png")}')
-            sprite_no += 1
-    else:
-        sprite.save(f'{file.replace(".atx", ".png")}', "PNG")
-        print(f'> Reconstructed CG saved as {file.replace(".atx", ".png")}')
+            file_name = output_path / (sprite[1] + ".png")
+            sprite[0].save(file_name, "PNG")
+            print(f'> Reconstructed CG saved as {file_name.name}')
     shutil.rmtree('temp')
     
